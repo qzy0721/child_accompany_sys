@@ -185,9 +185,9 @@ pip install -r requirements.txt
 
 在项目主目录下，确保 `indextts` 环境已激活，执行：
 ```bash
-python gui_main.py
+python gui_nice.py
 ```
-
+>nicegui是基于js的,会自动打开浏览器窗口。
 ---
 
 ## 📝 备注

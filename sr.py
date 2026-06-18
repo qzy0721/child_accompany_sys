@@ -299,6 +299,106 @@ class VoiceRecognizer:
         return result_text.strip()
 
 
+    def recognize_from_bytes(self, audio_bytes: bytes, audio_format: str = "wav") -> str:
+        """
+        从音频字节数据进行语音识别（用于 Web 端上传）
+        
+        Args:
+            audio_bytes: WAV 格式的音频数据 (推荐 16kHz, 16-bit, mono PCM)
+            audio_format: 音频格式 ("wav" 或 "pcm")
+        
+        Returns:
+            识别的文本字符串
+        """
+        import io
+        import wave
+        
+        # 重置状态
+        self.is_recording = False
+        
+        try:
+            # 解析音频数据
+            if audio_format == "wav":
+                with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
+                    nchannels = wf.getnchannels()
+                    sampwidth = wf.getsampwidth()
+                    src_sample_rate = wf.getframerate()
+                    pcm_data = wf.readframes(wf.getnframes())
+                
+                if nchannels != 1:
+                    print(f"⚠️ 音频通道数: {nchannels}，仅支持单声道")
+                    return ""
+                if sampwidth != 2:
+                    print(f"⚠️ 音频位深: {sampwidth*8}bit，仅支持16bit")
+                    return ""
+            else:
+                pcm_data = audio_bytes
+                src_sample_rate = self.samplerate
+            
+            # 重采样（如果需要）
+            if src_sample_rate != self.samplerate:
+                try:
+                    import numpy as np
+                    audio_array = np.frombuffer(pcm_data, dtype=np.int16)
+                    new_length = int(len(audio_array) * self.samplerate / src_sample_rate)
+                    if new_length > 0:
+                        # 使用线性插值进行简单重采样
+                        indices = np.linspace(0, len(audio_array) - 1, new_length)
+                        resampled = np.interp(indices, np.arange(len(audio_array)), audio_array.astype(np.float64))
+                        pcm_data = np.clip(resampled, -32768, 32767).astype(np.int16).tobytes()
+                except ImportError:
+                    print(f"⚠️ 需要 numpy 进行重采样 ({src_sample_rate}Hz -> {self.samplerate}Hz)")
+                    return ""
+            
+            print(f"📥 收到音频数据: {len(pcm_data)} bytes, {src_sample_rate}Hz")
+            
+            # 创建识别会话
+            if not self._create_recognition_session():
+                return ""
+            
+            # 分块发送所有音频数据
+            chunk_size = self.block_size * 2  # block_size frames × 2 bytes per sample
+            for i in range(0, len(pcm_data), chunk_size):
+                chunk = pcm_data[i:i + chunk_size]
+                if chunk and self.recognition:
+                    self.recognition.send_audio_frame(chunk)
+            
+            # 停止识别并等待结果
+            if self.recognition:
+                self.recognition.stop()
+                if self.callback and not self.callback.result_event.wait(timeout=10):
+                    print("⚠️ 等待识别结果超时")
+        
+        except Exception as e:
+            print(f"❌ 音频识别失败: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if self.recognition:
+                try:
+                    self.recognition.stop()
+                except Exception:
+                    pass
+            
+            # 清除音频队列
+            while not self.audio_queue.empty():
+                try:
+                    self.audio_queue.get_nowait()
+                except queue.Empty:
+                    break
+        
+        # 获取识别结果
+        result_text = ""
+        if self.callback:
+            if self.callback.results:
+                result_text = " ".join(self.callback.results)
+            elif self.callback.partial_result:
+                result_text = self.callback.partial_result
+        
+        print(f"🎯 识别结果: {result_text}" if result_text else "⚠️ 未获取到识别结果")
+        return result_text.strip()
+
+
 def test_audio_devices():
     """测试音频设备"""
     print("=== 音频设备测试 ===")

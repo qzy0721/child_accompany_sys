@@ -1,0 +1,6 @@
+\model
+*.json
+\reference_audio
+\__pycache__
+\temp_tts
+*.log

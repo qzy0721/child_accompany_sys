@@ -23,3 +23,17 @@ class Logger:
     def flush(self):
         self.file.flush()
         self.stdout.flush()
+    
+    def isatty(self):
+        """uvicorn 等库会调用 sys.stdout.isatty() 判断是否支持颜色输出"""
+        return False
+    
+    def fileno(self):
+        """返回文件描述符，供底层库使用"""
+        return self.file.fileno()
+    
+    def close(self):
+        """关闭日志文件"""
+        self.file.close()
+        sys.stdout = self.stdout
+        sys.stderr = self.stderr
