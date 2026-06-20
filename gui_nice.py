@@ -215,7 +215,7 @@ def _ensure_system_prompt_file() -> list:
     }
     with open(SYSTEM_PROMPT_FILE, 'w', encoding='utf-8') as f:
         _json.dump([default_entry], f, ensure_ascii=False, indent=2)
-    print("✅ system_prompt.json 已创建（熊大）")
+    print("system_prompt.json 已创建（熊大）")
     return ["熊大"]
 
 
@@ -231,7 +231,7 @@ async def background_init():
         state.roles = _ensure_system_prompt_file()
         if state.current_role not in state.roles and state.roles:
             state.current_role = state.roles[0]
-        print(f"✅ 角色列表加载完成: {state.roles}")
+        print(f"角色列表加载完成: {state.roles}")
     except Exception as e:
         print(f"⚠️ 角色列表加载失败: {e}")
         state.roles = ["熊大"]
@@ -240,7 +240,7 @@ async def background_init():
     try:
         state.memory_generator = MemoryGenerate()
         state._memory_ready = True
-        print("✅ 记忆模块就绪")
+        print("记忆模块就绪")
     except Exception as e:
         print(f"⚠️ 记忆模块初始化失败: {e}")
     
@@ -250,7 +250,7 @@ async def background_init():
         VoiceRecognizer = _SR
         state.voice_recognizer = VoiceRecognizer()
         state._audio_ready = True
-        print("✅ 语音识别模块就绪")
+        print("语音识别模块就绪")
     except Exception as e:
         print(f"⚠️ 语音识别初始化失败: {e}")
     
@@ -273,14 +273,14 @@ async def background_init():
         state._tts_loading = False
         
         if success:
-            print("✅ 语音合成模型加载完成")
+            print("语音合成模型加载完成")
         else:
             print("⚠️ 语音合成模型加载失败")
     except Exception as e:
         print(f"⚠️ TTS 初始化失败: {e}")
         state._tts_loading = False
     
-    print("✅ 后台初始化完成")
+    print("后台初始化完成")
 
 
 async def reload_tts_for_role(role_name: str):
@@ -353,7 +353,7 @@ def register_api_routes():
         methods=['POST'],
         response_model=None,
     )
-    print("✅ API 路由已注册: POST /api/speech-to-text")
+    print("API 路由已注册: POST /api/speech-to-text")
 
 
 # ============================================================
@@ -392,29 +392,142 @@ def chat_page():
         </script>
     ''')
     
-    # ----- 自定义 CSS -----
+    # ================ 自定义样式（儿童友好设计系统）================
     ui.add_head_html('''
+        <!-- Material Icons -->
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <!-- Google Font: 圆体/可爱风格中文字体 -->
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
+            :root {
+                --primary: #FF6B6B;
+                --primary-dark: #EE5A5A;
+                --primary-light: #FFE0E0;
+                --secondary: #4ECDC4;
+                --accent: #FFE66D;
+                --bg: #FFF5F5;
+                --surface: #FFFFFF;
+                --text: #2D3436;
+                --text-secondary: #636E72;
+                --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+                --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+                --shadow-lg: 0 8px 32px rgba(0,0,0,0.10);
+                --radius-sm: 10px;
+                --radius-md: 16px;
+                --radius-lg: 24px;
+                --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            * { font-family: 'Noto Sans SC', -apple-system, 'Microsoft YaHei', sans-serif; font-size: 15px; }
+            
             body {
-                background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 50%, #fff9c4 100%);
+                background: linear-gradient(160deg, #FFF5F5 0%, #FFF0E6 30%, #FFFAF0 60%, #F0FFF4 100%);
+                background-attachment: fixed;
                 min-height: 100vh;
             }
-            .chat-bubble-user {
-                background: #e3f2fd;
-                border-radius: 16px 16px 4px 16px;
+            /* 隐藏 select 下拉箭头图标 */
+            .q-select__dropdown-icon { display: none !important; }
+            
+            /* === Header === */
+            .app-header {
+                background: linear-gradient(135deg, #e55c5c 0%, #e57050 50%, #e88a40 100%) !important;
+                box-shadow: 0 2px 16px rgba(200, 70, 70, 0.3);
             }
-            .chat-bubble-assistant {
-                background: #fff3e0;
-                border-radius: 16px 16px 16px 4px;
+            
+            /* === Chat Bubbles === */
+            .q-message {
+                margin-bottom: 12px;
+                animation: fadeInUp 0.3s ease-out;
             }
-            .header-bar {
-                background: linear-gradient(90deg, #2E7D32, #388E3C);
+            .q-message[aria-label*="你"] .q-message-text {
+                background: linear-gradient(135deg, #FF6B6B, #FF8E6E) !important;
+                color: white !important;
+                border-radius: 18px 18px 4px 18px !important;
+                box-shadow: var(--shadow-sm);
             }
-            .status-bar {
+            .q-message:not([aria-label*="你"]) .q-message-text {
+                background: #FFFFFF !important;
+                border-radius: 18px 18px 18px 4px !important;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                border: 1px solid #F0F0F0;
+            }
+            .q-message-name {
+                font-weight: 600 !important;
+                font-size: 0.9em !important;
+                color: var(--text-secondary) !important;
+            }
+            .q-message-text {
+                font-size: 15px !important;
+            }
+            
+            /* === Buttons === */
+            .btn-send {
+                background: linear-gradient(135deg, #FF6B6B, #FF8E6E) !important;
+                border-radius: 14px !important;
+                box-shadow: 0 4px 14px rgba(255, 107, 107, 0.3);
+                transition: all var(--transition);
+            }
+            .btn-send:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+            }
+            
+            /* === Input === */
+            .chat-input textarea {
+                border-radius: 16px !important;
+                border: 2px solid #F0E0E0 !important;
+                background: var(--surface) !important;
+                transition: all var(--transition);
+                padding: 12px 16px !important;
+                font-size: 15px !important;
+            }
+            .chat-input textarea:focus {
+                border-color: var(--primary) !important;
+                box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+            }
+            
+            /* === Status Bar === */
+            .status-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 10px;
+                border-radius: 20px;
                 font-size: 12px;
-                color: #666;
-                background: #fafafa;
-                border-top: 1px solid #e0e0e0;
+                font-weight: 500;
+            }
+            .status-ready { background: #E8F5E9; color: #2E7D32; }
+            .status-loading { background: #FFF3E0; color: #E65100; }
+            .status-pending { background: #F5F5F5; color: #9E9E9E; }
+            
+            /* === Animations === */
+            @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(12px); }
+                to   { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes pulse-dot {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
+            }
+            .typing-dot {
+                animation: pulse-dot 1.4s infinite;
+            }
+            .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+            .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+            
+            /* === Scrollbar === */
+            ::-webkit-scrollbar { width: 6px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb {
+                background: #E0D0D0;
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover { background: #D0C0C0; }
+            
+            /* === Mobile Responsive === */
+            @media (max-width: 600px) {
+                .app-header .q-toolbar__title { font-size: 1rem !important; }
+                .hide-mobile { display: none !important; }
             }
         </style>
     ''')
@@ -436,9 +549,10 @@ def chat_page():
     }
     
     # ===================== HEADER =====================
-    with ui.header(elevated=True).classes('header-bar'):
-        with ui.row().classes('items-center w-full gap-3 px-2'):
-            ui.label('🧸 儿童陪伴智能助手').classes('text-h6 text-white font-bold')
+    with ui.header(elevated=True).classes('app-header'):
+        with ui.row().classes('items-center w-full gap-2 px-3 py-1'):
+            # Logo + 标题
+            ui.label('儿童陪伴智能助手').classes('text-h5 text-white').style('font-weight: 700;')
             ui.space()
             
             # 角色选择器
@@ -447,80 +561,80 @@ def chat_page():
                 value=state.current_role,
                 label='当前角色',
                 on_change=lambda e: on_role_change(e.value)
-            ).classes('w-36').props('dense outlined dark')
+            ).classes('w-40').props('dense outlined dark rounded hide-dropdown-icon')
             ui_elements['role_select'] = role_select
             
             # 新角色按钮
             new_role_btn = ui.button(
                 '+ 新角色',
                 on_click=lambda: show_new_role_dialog(),
-                color='amber-7'
-            ).props('size=sm')
+            ).props('size=sm rounded').style('background: white; color: #e55c5c; font-weight: 600')
             ui_elements['new_role_btn'] = new_role_btn
     
     # ===================== CHAT AREA =====================
-    chat_container = ui.column().classes('w-full max-w-3xl mx-auto px-4')
+    chat_container = ui.column().classes('w-full max-w-3xl mx-auto px-4 py-2')
     ui_elements['chat_area'] = chat_container
     
-    # ===================== INPUT AREA =====================
-    with ui.footer().classes('bg-white'):
-        with ui.row().classes('w-full items-start gap-2 p-3'):
-            # 输入框
-            input_text = ui.textarea(
-                placeholder='输入你的消息...',
-            ).classes('flex-grow').props('outlined rows=2 dense clearable')
-            ui_elements['input_text'] = input_text
-            
-            # 按钮组
-            with ui.column().classes('gap-1'):
-                send_btn = ui.button(
-                    '发送', icon='send', color='green-7',
-                    on_click=lambda: on_send_clicked()
-                ).props('size=md')
-                ui_elements['send_btn'] = send_btn
+    # ===================== INPUT AREA (浮动设计) =====================
+    with ui.footer().classes('bg-transparent'):
+        with ui.card().classes('w-full max-w-3xl mx-auto mb-2 shadow-lg rounded-2xl no-shadow'):
+            with ui.column().classes('w-full gap-2 p-3'):
+                # 输入框
+                input_text = ui.textarea(
+                    placeholder='输入你的消息...',
+                ).classes('chat-input flex-grow w-full').props('outlined rows=2 dense clearable autogrow')
+                ui_elements['input_text'] = input_text
                 
-                voice_btn = ui.button(
-                    '🎤 语音', color='blue-7',
-                    on_click=lambda: on_voice_clicked()
-                ).props('size=md')
-                ui_elements['voice_btn'] = voice_btn
-                
-                with ui.row().classes('gap-1'):
+                # 按钮行
+                with ui.row().classes('w-full items-center gap-2'):
+                    ui.space()
+                    
+                    voice_btn = ui.button(
+                        '🎤', color='blue-5',
+                        on_click=lambda: on_voice_clicked()
+                    ).props('rounded glossy size=md')
+                    ui_elements['voice_btn'] = voice_btn
+                    
                     memory_btn = ui.button(
-                        '🧠', color='purple-7',
+                        '🧠', color='purple-5',
                         on_click=lambda: on_memory_clicked()
-                    ).props('size=md dense').tooltip('生成记忆')
+                    ).props('rounded glossy size=md')
                     ui_elements['memory_btn'] = memory_btn
                     
                     clear_btn = ui.button(
-                        '🗑️', color='orange-7',
+                        '清空', color='grey-5',
                         on_click=lambda: on_clear_clicked()
-                    ).props('size=md dense flat').tooltip('清空对话')
+                    ).props('rounded flat size=md')
                     ui_elements['clear_btn'] = clear_btn
+                    
+                    send_btn = ui.button(
+                        '发送',
+                        on_click=lambda: on_send_clicked()
+                    ).classes('btn-send').props('size=md rounded glossy')
+                    ui_elements['send_btn'] = send_btn
         
-        # 状态栏
-        with ui.row().classes('status-bar w-full items-center gap-2 px-3 py-1'):
-            status_label = ui.label('✓ 就绪')
+        # 状态栏（胶囊式）
+        with ui.row().classes('w-full justify-center pb-2'):
+            status_label = ui.html('').classes('text-caption')
             ui_elements['status_label'] = status_label
-            ui.space()
-            tts_status = ui.label('').classes('text-caption')
-            ui_elements['tts_spinner'] = tts_status
     
     # ===================== 状态更新定时器 =====================
     def update_status():
-        """定时更新状态栏显示"""
-        parts = ['✓ 聊天就绪']
+        """定时更新状态栏 — 胶囊式状态指示"""
+        parts = []
+        parts.append('<span class="status-pill status-ready">聊天就绪</span>')
         if state._audio_ready:
-            parts.append('🎤 语音就绪')
+            parts.append('<span class="status-pill status-ready">语音就绪</span>')
         else:
-            parts.append('🎤 加载中')
+            parts.append('<span class="status-pill status-pending">语音加载中</span>')
         if state._tts_ready:
-            parts.append('🔊 TTS就绪')
+            parts.append('<span class="status-pill status-ready">语音合成就绪</span>')
         elif state._tts_loading:
-            parts.append('⏳ TTS加载中...')
+            parts.append('<span class="status-pill status-loading">语音合成加载中</span>')
         else:
-            parts.append('🔇 TTS待加载')
-        ui_elements['status_label'].set_text(' | '.join(parts))
+            parts.append('<span class="status-pill status-pending">语音合成待机</span>')
+        
+        ui_elements['status_label'].set_content(' '.join(parts))
     
     ui.timer(2.0, update_status)
     
@@ -549,7 +663,7 @@ def chat_page():
         
         # 显示用户消息
         with chat_container:
-            ui.chat_message(text=user_text, name='👦 你', sent=True)
+            ui.chat_message(text=user_text, name='你', sent=True)
         
         # 添加到消息列表
         state.messages.append({'role': 'user', 'content': user_text})
@@ -572,7 +686,7 @@ def chat_page():
         with chat_container:
             msg_element = ui.chat_message(
                 text='思考中...',
-                name=f'🤖 {state.current_role}',
+                name=state.current_role,
                 sent=False
             )
         
@@ -623,7 +737,7 @@ def chat_page():
                 asyncio.create_task(auto_generate_memory())
         
         except Exception as e:
-            _update_msg(f'❌ 出错了: {str(e)}')
+            _update_msg(f'出错了: {str(e)}')
             print(f"AI 响应错误: {e}")
     
     
@@ -638,7 +752,7 @@ def chat_page():
             return
         
         ui_elements['voice_btn'].disable()
-        ui.notify('🎤 正在聆听...', type='info', position='top', timeout=8000)
+        ui.notify('正在聆听...', type='info', position='top', timeout=8000)
         
         try:
             # 调用浏览器录音
@@ -677,7 +791,7 @@ def chat_page():
                     max_history_messages=10
                 )
                 if result:
-                    ui.notify(f'✅ 记忆已生成: {result[:50]}...', type='positive')
+                    ui.notify(f'记忆已生成: {result[:50]}...', type='positive')
                 else:
                     ui.notify('⚠️ 记忆生成失败或无可提取内容', type='warning')
             except Exception as e:
@@ -696,7 +810,7 @@ def chat_page():
                     state.memory_generator.generate_memory,
                     max_history_messages=10
                 )
-                print("✅ 自动记忆已更新")
+                print("自动记忆已更新")
         except Exception as e:
             print(f"自动记忆更新失败: {e}")
     
@@ -729,9 +843,9 @@ def chat_page():
         chat_container.clear()
         
         # 显示问候语
-        greeting = f"我是{state.current_role}"
+        greeting = f"嘿嘿，俺是{state.current_role}！今天想跟俺聊点啥子呀？"
         with chat_container:
-            ui.chat_message(text=greeting, name=f'🤖 {state.current_role}', sent=False)
+            ui.chat_message(text=greeting, name=state.current_role, sent=False)
         
         # 保存空的对话历史
         save_history()
@@ -783,23 +897,24 @@ def chat_page():
         """显示新建角色对话框（两阶段：输入名称 → 上传参考音频）"""
         ui_elements['new_role_btn'].disable()
         
-        with ui.dialog() as dialog, ui.card().classes('p-4 gap-3 max-w-md'):
-            ui.label('创建新角色').classes('text-h6 font-bold')
+        with ui.dialog() as dialog, ui.card().classes('p-6 gap-3 max-w-md rounded-2xl shadow-xl'):
+            with ui.row().classes('items-center gap-2'):
+                ui.label('创建新角色').classes('text-h5').style('font-weight: 700;')
             
             # ===== 阶段 1：输入角色名称 =====
             phase1 = ui.column().classes('gap-2 w-full')
             with phase1:
-                ui.label('请输入角色名称，AI 将自动生成角色提示词').classes('text-body2')
+                ui.label('请输入角色名称，AI 将自动生成角色提示词').classes('text-body2 text-grey-7')
                 role_name_input = ui.input(
                     label='角色名称',
                     placeholder='例如: 喜羊羊, 奥特曼...'
-                ).classes('w-full').props('autofocus')
+                ).classes('w-full').props('autofocus outlined rounded')
             
             # ===== 阶段 2：上传参考音频（初始隐藏）=====
             phase2 = ui.column().classes('gap-2 w-full')
             phase2.set_visibility(False)
             with phase2:
-                ui.label('✅ 角色提示词已生成！').classes('text-positive text-subtitle2')
+                ui.label('角色提示词已生成！').classes('text-positive text-subtitle2')
                 ui.label('请上传一段参考音频（WAV 格式），用于语音克隆：').classes('text-body2')
                 
                 upload_status = ui.label('').classes('text-caption')
@@ -818,9 +933,9 @@ def chat_page():
                         await e.file.save(filepath)
                         upload_result['path'] = filepath
                         upload_result['name'] = e.file.name
-                        upload_status.set_text(f'✅ 已选择: {e.file.name}')
+                        upload_status.set_text(f'已选择: {e.file.name}')
                     except Exception as ex:
-                        upload_status.set_text(f'❌ 保存失败: {ex}')
+                        upload_status.set_text(f'保存失败: {ex}')
                 
                 u = ui.upload(
                     on_upload=on_upload,
@@ -844,15 +959,15 @@ def chat_page():
             # ===== 阶段 1 按钮 =====
             phase1_btns = ui.row().classes('gap-2')
             with phase1_btns:
-                cancel_btn = ui.button('取消', on_click=dialog.close).props('flat')
-                create_btn = ui.button('生成角色提示词', on_click=lambda: do_create(), color='green')
+                cancel_btn = ui.button('取消', on_click=dialog.close).props('flat rounded')
+                create_btn = ui.button('生成角色提示词', on_click=lambda: do_create()).props('rounded glossy').style('background: #e55c5c; color: white')
             
             # ===== 阶段 2 按钮（初始隐藏）=====
             phase2_btns = ui.row().classes('gap-2')
             phase2_btns.set_visibility(False)
             with phase2_btns:
-                back_btn = ui.button('← 返回', on_click=lambda: upload_done.set()).props('flat')
-                save_btn = ui.button('保存角色', on_click=lambda: finish_role(), color='green')
+                back_btn = ui.button('← 返回', on_click=lambda: upload_done.set()).props('flat rounded')
+                save_btn = ui.button('保存角色', on_click=lambda: finish_role()).props('rounded glossy').style('background: #e55c5c; color: white')
             
             # 跨阶段共享变量
             role_data = {'optimizer': None, 'name': None}
@@ -936,7 +1051,7 @@ def chat_page():
                             ui_elements['role_select'].value = name
                         finally:
                             ui_elements['_skip_role_confirm'] = False
-                        ui.notify(f'✅ 角色「{name}」创建成功！', type='positive')
+                        ui.notify(f'角色「{name}」创建成功！', type='positive')
                         dialog.close()
                     else:
                         ui.notify('保存失败', type='negative')
@@ -969,17 +1084,17 @@ def chat_page():
         for msg in state.messages:
             if msg['role'] == 'user':
                 with chat_container:
-                    ui.chat_message(text=msg['content'], name='👦 你', sent=True)
+                    ui.chat_message(text=msg['content'], name='你', sent=True)
             elif msg['role'] == 'assistant':
                 with chat_container:
-                    ui.chat_message(text=msg['content'], name=f'🤖 {state.current_role}', sent=False)
+                    ui.chat_message(text=msg['content'], name=state.current_role, sent=False)
         
         # 如果没有历史消息，显示问候语
         has_history = any(m['role'] == 'assistant' for m in state.messages)
         if not has_history:
             greeting = f"嘿嘿，俺是{state.current_role}！今天想跟俺聊点啥子呀？"
             with chat_container:
-                ui.chat_message(text=greeting, name=f'🤖 {state.current_role}', sent=False)
+                ui.chat_message(text=greeting, name=state.current_role, sent=False)
         
         # 启动后台初始化（timer 回调保留 slot 上下文）
         ui.timer(0.01, safe_background_init, once=True)
@@ -992,7 +1107,7 @@ def chat_page():
         try:
             await background_init()
         except Exception as e:
-            print(f"❌ 后台初始化失败: {e}")
+            print(f"后台初始化失败: {e}")
             import traceback
             traceback.print_exc()
 
