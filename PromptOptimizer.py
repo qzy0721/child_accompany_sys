@@ -6,13 +6,15 @@ import json
 import os
 import subprocess
 import tempfile
-import dashscope
 from datetime import datetime
-from api import call_qwen_stream
-from config import PROMPT_OPTIMIZER_PROMPT, Qwen_API_KEY, SYSTEM_PROMPT_FILE 
-
-# 设置 DashScope API Key
-dashscope.api_key = Qwen_API_KEY
+from api import LLM_ERROR_PREFIX, call_llm_stream
+from config import (
+    PROMPT_OPTIMIZER_PROMPT,
+    PROMPT_OPTIMIZER_PROMPT_WITH_BAIKE,
+    SYSTEM_PROMPT_FILE,
+    resolve_reference_audio_path,
+)
+from json_store import json_file_lock, read_json, write_json
 
 
 class PromptOptimizer:
@@ -177,115 +179,140 @@ class PromptOptimizer:
         Args:
             path (str): 音频文件路径
         """
-        if os.path.exists(path):
+        local_path = resolve_reference_audio_path(path)
+        if local_path and os.path.exists(local_path):
             self.reference_audio_path = path
             print(f"已设置参考音频路径: {path}")
         else:
             print(f"警告: 文件路径不存在: {path}")
     
-    def generate_optimized_prompt(self):
+    def generate_optimized_prompt(self, baike_content: str = ""):
         """
-        生成优化的系统提示词
-        
+        生成优化的系统提示词。
+
+        Args:
+            baike_content: 百度百科正文内容（可选）。
+                           为空字符串时使用原模板，不注入百科知识；
+                           非空时使用含百科的模板，将百科内容作为参考资料喂给 LLM。
+
         Returns:
             tuple: (success: bool, prompt: str) 生成是否成功和优化后的提示词
         """
         try:
+            # 根据是否有百科内容选择模板和用户消息
+            if baike_content:
+                template = PROMPT_OPTIMIZER_PROMPT_WITH_BAIKE
+                user_content = (
+                    f"请为角色'{self.role_name}'创建一个系统级提示词:\n\n"
+                    f"---百科参考资料---\n{baike_content}\n---百科参考资料结束---"
+                )
+                print(f"正在为角色'{self.role_name}'生成优化提示词（含百科知识）...")
+            else:
+                template = self.system_prompt_template
+                user_content = f"请为角色'{self.role_name}'创建一个系统级提示词:"
+                print(f"正在为角色'{self.role_name}'生成优化提示词...")
+
             # 构造消息列表
             messages = [
                 {
-                    "role": "system", 
-                    "content": self.system_prompt_template
+                    "role": "system",
+                    "content": template
                 },
                 {
-                    "role": "user", 
-                    "content": f"请为角色'{self.role_name}'创建一个系统级提示词:"
+                    "role": "user",
+                    "content": user_content
                 }
             ]
-            
+
             # 调用流式API并累加结果
             full_response = ""
-            print(f"正在为角色'{self.role_name}'生成优化提示词...")
-            
-            for chunk in call_qwen_stream(messages):
-                if chunk.startswith("\n[ERROR]"):
+
+            for chunk in call_llm_stream(messages):
+                if chunk.startswith(LLM_ERROR_PREFIX):
                     print(f"生成失败: {chunk}")
                     return False, chunk
-                
+
                 full_response += chunk
                 # 可以在这里添加实时显示逻辑
                 print(chunk, end="", flush=True)
-            
+
             print("\n")  # 换行
             self.optimized_prompt = full_response.strip()
             return True, self.optimized_prompt
-            
+
         except Exception as e:
             error_msg = f"生成过程中出现异常: {str(e)}"
             print(error_msg)
             return False, error_msg
     
-    def save_to_json(self, filename=SYSTEM_PROMPT_FILE):
+    def save_to_json(
+        self,
+        filename=SYSTEM_PROMPT_FILE,
+        voice_id=None,
+        voice_provider=None,
+        oss_url=None,
+        target_model=None,
+    ):
         """
         将优化后的提示词保存到JSON文件
-        
+
         Args:
             filename (str): 保存的文件名
-            
+            voice_id (str): 云端音色 ID（可选）
+            target_model (str): TTS 目标模型（可选）
+
         Returns:
             bool: 保存是否成功
         """
         if not self.optimized_prompt:
             print("没有可保存的提示词，请先调用generate_optimized_prompt()")
             return False
-        
+
         try:
-            # 构造保存的数据结构
             new_data = {
                 "role_name": self.role_name,
                 "system_prompt": self.optimized_prompt,
                 "reference_audio_path": self.reference_audio_path,
                 "timestamp": datetime.now().isoformat()
             }
-            
-            # 读取现有数据（如果文件存在）
-            all_data = []
-            if os.path.exists(filename):
+            if voice_id:
+                new_data["voice_id"] = voice_id
+            if voice_provider:
+                new_data["voice_provider"] = voice_provider
+            if oss_url:
+                new_data["oss_url"] = oss_url
+            if target_model:
+                new_data["target_model"] = target_model
+
+            with json_file_lock(filename):
                 try:
-                    with open(filename, 'r', encoding='utf-8') as f:
-                        existing_data = json.load(f)
-                        # 如果文件内容是一个列表，直接使用
-                        if isinstance(existing_data, list):
-                            all_data = existing_data
-                        # 如果文件内容是单个对象，转换为列表
-                        else:
-                            all_data = [existing_data]
+                    existing_data = read_json(filename)
+                    all_data = existing_data if isinstance(existing_data, list) else [existing_data]
+                except FileNotFoundError:
+                    all_data = []
                 except json.JSONDecodeError:
                     print("警告：现有文件格式错误，将创建新文件")
                     all_data = []
-            
-            # 检查是否已存在相同角色的提示词
-            role_exists = False
-            for i, item in enumerate(all_data):
-                if isinstance(item, dict) and item.get("role_name") == self.role_name:
-                    # 更新已存在的角色提示词
-                    all_data[i] = new_data
-                    role_exists = True
-                    print(f"更新角色 '{self.role_name}' 的提示词")
-                    break
-            
-            # 如果角色不存在，添加到列表
-            if not role_exists:
-                all_data.append(new_data)
-                print(f"添加新角色 '{self.role_name}' 的提示词")
-            
-            # 保存到文件
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(all_data, f, ensure_ascii=False, indent=2)
-            
+
+                role_exists = False
+                for i, item in enumerate(all_data):
+                    if isinstance(item, dict) and item.get("role_name") == self.role_name:
+                        existing = all_data[i]
+                        existing.update(new_data)
+                        all_data[i] = existing
+                        role_exists = True
+                        print(f"更新角色 '{self.role_name}' 的提示词")
+                        break
+
+                if not role_exists:
+                    all_data.append(new_data)
+                    print(f"添加新角色 '{self.role_name}' 的提示词")
+
+                write_json(filename, all_data)
+
             print(f"提示词已成功保存到 {filename}")
             return True
-            
+
         except Exception as e:
             print(f"保存文件失败: {str(e)}")
             return False
@@ -324,14 +351,10 @@ class PromptOptimizer:
         Returns:
             list: 提示词列表，如果文件不存在或格式错误返回空列表
         """
-        if not os.path.exists(filename):
-            return []
-        
         try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data if isinstance(data, list) else [data]
-        except (json.JSONDecodeError, Exception) as e:
+            data = read_json(filename)
+            return data if isinstance(data, list) else [data]
+        except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
             print(f"加载提示词文件失败: {str(e)}")
             return []
     
@@ -357,11 +380,11 @@ class PromptOptimizer:
     def get_reference_audio_by_role(role_name, filename=SYSTEM_PROMPT_FILE):
         """
         根据角色名获取对应的参考音频路径
-        
+
         Args:
             role_name (str): 角色名
             filename (str): 文件名
-            
+
         Returns:
             str: 对应的参考音频路径，如果找不到返回None
         """
@@ -370,6 +393,77 @@ class PromptOptimizer:
             if isinstance(item, dict) and item.get("role_name") == role_name:
                 return item.get("reference_audio_path", "")
         return None
+
+    @staticmethod
+    def get_voice_id_by_role(role_name, filename=SYSTEM_PROMPT_FILE):
+        """
+        根据角色名获取对应的云端音色 ID。
+
+        Args:
+            role_name (str): 角色名
+            filename (str): 文件名
+
+        Returns:
+            str: 对应的 voice_id，如果找不到返回 None
+        """
+        prompts = PromptOptimizer.load_prompts(filename)
+        for item in prompts:
+            if isinstance(item, dict) and item.get("role_name") == role_name:
+                return item.get("voice_id")
+        return None
+
+    @staticmethod
+    def update_role_voice(
+        role_name,
+        voice_id,
+        voice_provider=None,
+        oss_url=None,
+        target_model=None,
+        filename=SYSTEM_PROMPT_FILE,
+    ):
+        """
+        更新指定角色的云端音色信息（不改变提示词和音频路径）。
+
+        用于: 已有角色补充 voice_id，或音色重建后更新。
+
+        Args:
+            role_name (str): 角色名
+            voice_id (str): 新的 voice_id
+            target_model (str): 目标模型（可选）
+            filename (str): 文件名
+
+        Returns:
+            bool: 更新是否成功
+        """
+        try:
+            with json_file_lock(filename):
+                prompts = PromptOptimizer.load_prompts(filename)
+                found = False
+                for i, item in enumerate(prompts):
+                    if isinstance(item, dict) and item.get("role_name") == role_name:
+                        item["voice_id"] = voice_id
+                        if voice_provider:
+                            item["voice_provider"] = voice_provider
+                        if oss_url:
+                            item["oss_url"] = oss_url
+                        else:
+                            item.pop("oss_url", None)
+                        if target_model:
+                            item["target_model"] = target_model
+                        prompts[i] = item
+                        found = True
+                        break
+
+                if not found:
+                    print(f"角色 '{role_name}' 不存在")
+                    return False
+
+                write_json(filename, prompts)
+            print(f"已更新角色 '{role_name}' 的音色信息: voice_id={voice_id}")
+            return True
+        except Exception as e:
+            print(f"更新失败: {e}")
+            return False
     
     @staticmethod
     def list_all_roles(filename=SYSTEM_PROMPT_FILE):
@@ -423,8 +517,7 @@ class PromptOptimizer:
 
 # 调用实例
 def main():
-    # 用户输入角色名
-    role_name = "熊大"
+    role_name = os.getenv("DEFAULT_ROLE_NAME", "熊大")
     
     # 创建优化器实例
     optimizer = PromptOptimizer(role_name)

@@ -3,15 +3,11 @@
 # MemoryGenerate.py
 
 import json
-import dashscope
 import os
 from datetime import datetime
-from config import MEMORY_GENERATE_PROMPT , HISTORY_FILE , HISTORY_MEMROY, Qwen_API_KEY
-from api import call_qwen_stream
-
-
-# 设置 DashScope API Key
-dashscope.api_key = Qwen_API_KEY
+from config import MEMORY_GENERATE_PROMPT , HISTORY_FILE , HISTORY_MEMROY
+from api import LLM_ERROR_PREFIX, call_llm_stream
+from json_store import json_file_lock, read_json, write_json
 
 class MemoryGenerate:
     def __init__(self, history_file=HISTORY_FILE, memory_file= HISTORY_MEMROY):
@@ -27,16 +23,29 @@ class MemoryGenerate:
         self.memory_data = self._load_memory()
     
     def _load_conversation_history(self):
-        """读取对话历史记录"""
+        """读取对话历史记录（兼容新旧两种格式）"""
         try:
-            with open(self.history_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            data = read_json(self.history_file)
         except FileNotFoundError:
             print(f"警告: 对话历史文件 {self.history_file} 不存在")
             return []
         except json.JSONDecodeError:
             print(f"错误: 对话历史文件 {self.history_file} 格式错误")
             return []
+
+        if not data:
+            return []
+
+        # 新格式: [{role_name, messages: [{role, content}], timestamp}]
+        #   展开为平面消息列表 [{role, content}, ...]
+        if isinstance(data[0], dict) and "messages" in data[0]:
+            flat = []
+            for turn in data:
+                flat.extend(turn.get("messages", []))
+            return flat
+
+        # 旧格式: 直接是 [{role, content}, ...]
+        return data
     
     def _load_memory(self):
         """读取现有记忆"""
@@ -44,8 +53,7 @@ class MemoryGenerate:
             return {"memories": [], "last_updated": None}
         
         try:
-            with open(self.memory_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return read_json(self.memory_file)
         except (FileNotFoundError, json.JSONDecodeError):
             return {"memories": [], "last_updated": None}
     
@@ -54,8 +62,7 @@ class MemoryGenerate:
         self.memory_data["last_updated"] = datetime.now().isoformat()
         
         try:
-            with open(self.memory_file, 'w', encoding='utf-8') as f:
-                json.dump(self.memory_data, f, ensure_ascii=False, indent=2)
+            write_json(self.memory_file, self.memory_data)
             return True
         except Exception as e:
             print(f"保存记忆文件失败: {e}")
@@ -100,32 +107,40 @@ class MemoryGenerate:
             {"role": "user", "content": user_prompt}
         ]
         
-        print("正在生成记忆...")
+        print("Generating...")
         
         try:
             # 调用API生成记忆
             memory_content = ""
-            for chunk in call_qwen_stream(messages):
+            for chunk in call_llm_stream(messages):
+                if chunk.startswith(LLM_ERROR_PREFIX):
+                    print(f"记忆生成失败: {chunk}")
+                    return None
                 memory_content += chunk
                 print(chunk, end="", flush=True)
             
             print("\n")  # 换行
             
-            if memory_content and not memory_content.startswith("[ERROR]"):
-                # 创建新的记忆条目
-                new_memory = {
-                    "id": len(self.memory_data["memories"]) + 1,
-                    "content": memory_content.strip(),
-                    "timestamp": datetime.now().isoformat(),
-                    "source_conversation_count": len(recent_history)
-                }
-                
-                # 添加到记忆列表
-                self.memory_data["memories"].append(new_memory)
-                
-                # 保存到文件
-                if self._save_memory():
-                    print(f"记忆已保存到 {self.memory_file}")
+            if memory_content and not memory_content.lstrip().startswith("[ERROR]"):
+                # LLM 调用期间文件可能已变化，提交前重新读取并锁住完整事务。
+                with json_file_lock(self.memory_file):
+                    self.memory_data = self._load_memory()
+                    memories = self.memory_data.setdefault("memories", [])
+                    next_id = max(
+                        (item.get("id", 0) for item in memories if isinstance(item, dict)),
+                        default=0,
+                    ) + 1
+                    new_memory = {
+                        "id": next_id,
+                        "content": memory_content.strip(),
+                        "timestamp": datetime.now().isoformat(),
+                        "source_conversation_count": len(recent_history)
+                    }
+                    memories.append(new_memory)
+                    saved = self._save_memory()
+
+                if saved:
+                    print(f"Memory saved to {self.memory_file}")
                     return memory_content.strip()
                 else:
                     print("记忆生成成功但保存失败")
@@ -140,6 +155,7 @@ class MemoryGenerate:
     
     def get_memories(self, limit=None):
         """获取所有记忆"""
+        self.memory_data = self._load_memory()
         memories = self.memory_data.get("memories", [])
         if limit:
             return memories[-limit:]
@@ -147,8 +163,9 @@ class MemoryGenerate:
     
     def clear_memories(self):
         """清空所有记忆"""
-        self.memory_data = {"memories": [], "last_updated": datetime.now().isoformat()}
-        return self._save_memory()
+        with json_file_lock(self.memory_file):
+            self.memory_data = {"memories": [], "last_updated": datetime.now().isoformat()}
+            return self._save_memory()
     
 
 
