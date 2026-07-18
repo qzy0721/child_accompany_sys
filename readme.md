@@ -18,7 +18,7 @@
 
 ### 使用安装包
 
-运行 [VirtualCompanion-Setup-0.1.0.exe](dist/installer/VirtualCompanion-Setup-0.1.0.exe) 安装即可。安装器默认安装到：
+运行 VirtualCompanion-Setup-0.1.0.exe 安装即可。安装器默认安装到：
 
 ```text
 %LOCALAPPDATA%\Programs\VirtualCompanion

@@ -1,11 +1,10 @@
 model
+!models
 *.json
 __pycache__
-temp_tts
 *.log
-*.vrm
-*.vrma
 *.wav
+*.mp3
 *.env
 web/node_modules/
 web/dist/
